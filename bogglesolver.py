@@ -6,6 +6,7 @@ Andrew Gillis 22 Dec. 2009
 """
 from __future__ import print_function
 import sys
+import collections
 
 import trie
 
@@ -90,14 +91,14 @@ class BoggleSolver(object):
         board = list(grid)
         trie = self.trie
         words = set()
-        q = []
+        q = collections.deque()
         adjs = self.adjacency
 
         for init_sq in range(self.board_size):
             c = board[init_sq]
             q.append((init_sq, c, trie.get_child(c), [init_sq]))
             while q:
-                parent_sq, prefix, pnode, seen = q.pop(0)
+                parent_sq, prefix, pnode, seen = q.popleft()
                 pnode_get_child = pnode.get_child
                 if adjs:
                     adj = adjs[parent_sq]
