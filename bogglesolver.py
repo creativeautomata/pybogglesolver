@@ -1,11 +1,16 @@
 """
 Module to generate solutions for Boggle grids.
 
-Andrew Gillis  22 Dec. 2009
+Andrew Gillis 22 Dec. 2009
 
 """
+from __future__ import print_function
+import sys
+
 import trie
 
+if sys.version < '3':
+    range = xrange
 
 class BoggleSolver(object):
     """
@@ -16,9 +21,8 @@ class BoggleSolver(object):
 
     """
 
-    def __init__(self, xlen=None, ylen=None, max_letters=None, min_letters=3):
-        """
-        Create and initialize BoggleSolver instance.
+    def __init__(self, xlen=None, ylen=None, pre_compute_adj=False):
+        """Create and initialize BoggleSolver instance.
 
         This creates the internal trie for fast word lookup letter-by-letter.
         Words that begin with capital letters and words that are not within the
@@ -27,8 +31,7 @@ class BoggleSolver(object):
         Arguments:
         xlen        -- X dimension (width) of board.
         ylen        -- Y dimension (height) of board.
-        max_letters -- Valid words must not have more than this many letters.
-        min_letters -- Valid words must have at least this many letters.
+        pre_compute_adj -- Pre-compute adjacency matrix.
 
         """
         if xlen is None:
@@ -38,23 +41,17 @@ class BoggleSolver(object):
         assert(xlen > 1)
         assert(ylen > 1)
         board_size = xlen * ylen
-        if max_letters is None:
-            max_letters = board_size
-        assert(min_letters > 1)
-        assert(max_letters <= board_size)
-        assert(min_letters <= max_letters)
         self.xlen = xlen
         self.ylen = ylen
         self.board_size = board_size
-        self.min_letters = min_letters
-        self.max_letters = max_letters
-        self.adjacency = BoggleSolver._create_adjacency_matrix(xlen, ylen)
+        if pre_compute_adj:
+            self.adjacency = BoggleSolver._create_adjacency_matrix(xlen, ylen)
+        else:
+            self.adjacency = None
         self.trie = None
 
-
     def load_dictionary(self, words_file):
-        """
-        Load the file containing the reference words.
+        """Load the file containing the reference words.
 
         Arguments:
         word_file   -- File containing valid words.  Each word must be on a
@@ -67,16 +64,13 @@ class BoggleSolver(object):
         try:
             word_count = self._create_dict_trie(words_file)
         except IOError:
-            print 'ERROR: unable to open dictionary file:', words_file
-            return False
+            raise RuntimeError('unable to open words file: ' + words_file)
 
-        print 'loaded', word_count, 'words from dictionary'
+        print('loaded', word_count, 'words from words file')
         return True
 
-
     def solve(self, grid):
-        """
-        Generate all solutions for the given boggle grid.
+        """Generate all solutions for the given boggle grid.
 
         Arguments:
         grid -- A string of 16 characters representing the letters in a boggle
@@ -88,12 +82,10 @@ class BoggleSolver(object):
 
         """
         if self.trie is None:
-            print 'ERROR: dictionary file not loaded'
-            return None
+            raise RuntimeError('dictionary file not loaded')
 
         if len(grid) != self.board_size:
-            print 'ERROR: invalid board'
-            return None
+            raise RuntimeError('invalid board')
 
         board = list(grid)
         trie = self.trie
@@ -101,13 +93,17 @@ class BoggleSolver(object):
         q = []
         adjs = self.adjacency
 
-        for init_sq in xrange(len(adjs)):
+        for init_sq in range(self.board_size):
             c = board[init_sq]
             q.append((init_sq, c, trie.get_child(c), [init_sq]))
             while q:
                 parent_sq, prefix, pnode, seen = q.pop(0)
                 pnode_get_child = pnode.get_child
-                for cur_sq in adjs[parent_sq]:
+                if adjs:
+                    adj = adjs[parent_sq]
+                else:
+                    adj = self._calc_adjacency(self.xlen, self.ylen, parent_sq)
+                for cur_sq in adj:
                     if cur_sq in seen:
                         continue
                     c = board[cur_sq]
@@ -125,21 +121,19 @@ class BoggleSolver(object):
 
         return words
 
-
     def show_grid(self, grid):
-        """
-        Utility method to print a 4x4 boggle grid.
+        """Utility method to print a 4x4 boggle grid.
 
         Arguments:
         grid -- A string of X*Y characters representing the letters in a boggle
                 grid, from top left to bottom right.
 
         """
-        for y in xrange(self.ylen):
-            print '+' + '---+' * self.xlen
+        for y in range(self.ylen):
+            print('+' + '---+' * self.xlen)
             yi = y * self.xlen
             line = ['| ']
-            for x in xrange(self.xlen):
+            for x in range(self.xlen):
                 cell = grid[yi+x].upper()
                 if cell == 'Q':
                     line.append('Qu')
@@ -147,13 +141,11 @@ class BoggleSolver(object):
                 else:
                     line.append(cell)
                     line.append(' | ')
-            print ''.join(line)
-        print '+' + '---+' * self.xlen
-
+            print(''.join(line))
+        print('+' + '---+' * self.xlen)
 
     def find_substrings(self, string):
-        """
-        Find all valid substrings in the given string.
+        """Find all valid substrings in the given string.
 
         This method is not necessary for the boggle solver, but is a utility
         for testing that all substrings of a word are correctly found.
@@ -166,9 +158,9 @@ class BoggleSolver(object):
 
         """
         found = set()
-        for start in xrange(len(string)):
+        for start in range(len(string)):
             cur = self.trie
-            letters = [None] * self.max_letters
+            letters = [None] * self.board_size
             count = 0
 
             for l in string[start:]:
@@ -184,10 +176,8 @@ class BoggleSolver(object):
 
         return found
 
-
     def _create_dict_trie(self, words_file):
-        """
-        Private method to create the trie for finding words.
+        """Private method to create the trie for finding words.
 
         Arguments:
         words_file  -- Path of file containing words for reference.
@@ -196,7 +186,7 @@ class BoggleSolver(object):
         Count of words inserted into trie.
 
         """
-        print 'creating dictionary...'
+        print('creating dictionary...')
         root = trie.Trie()
         word_count = 0
         if words_file.endswith('gz'):
@@ -209,10 +199,13 @@ class BoggleSolver(object):
             f = open(words_file)
         try:
             for word in f:
-                word = word[:-1]
+                if sys.version < '3':
+                    word = word.strip()
+                else:
+                    word = word.strip().decode("utf-8")
                 # Skip words that are too long or too short.
                 word_len = len(word)
-                if word_len > self.max_letters or word_len < self.min_letters:
+                if word_len > self.board_size or word_len < 3:
                     continue
                 # Skip words that start with capital letter.
                 if word[0].isupper():
@@ -225,67 +218,61 @@ class BoggleSolver(object):
                     # Remove "u" from q-words so that only the q is matched.
                     word = 'q' + word[2:]
 
-                #print 'adding word:', word
                 root.insert(word)
                 word_count += 1
         finally:
             f.close()
 
-        print 'finished creating dictionary'
+        print('finished creating dictionary')
         self.trie = root
         return word_count
 
-
     @staticmethod
     def _create_adjacency_matrix(xlim, ylim):
-        adj_list = [[]] * (ylim*xlim)
-
-        for y in xrange(ylim):
-            for x in xrange(xlim):
-                # Current cell index = y * xlim + x
-                adj = []
-                adj_list[y*xlim + x] = adj
-
-                # Look at row above current cell.
-                cell_y = y-1
-                if cell_y >= 0:
-                    # Look to upper left.
-                    cell_x = x-1
-                    if cell_x >=0:
-                        adj.append(cell_y*xlim + cell_x)
-                    # Look above.
-                    cell_x = x
-                    adj.append(cell_y*xlim + cell_x)
-                    # Look upper right.
-                    cell_x = x+1
-                    if cell_x < xlim:
-                        adj.append(cell_y*xlim + cell_x)
-
-                # Look at same row that current cell is on.
-                cell_y = y
-                # Look to left of current cell.
-                cell_x = x-1
-                if cell_x >=0:
-                    adj.append(cell_y*xlim + cell_x)
-                # Look to right of current cell.
-                cell_x = x+1
-                if cell_x < xlim:
-                    adj.append(cell_y*xlim + cell_x)
-
-                # Look at row below current cell.
-                cell_y = y+1
-                if cell_y < ylim:
-                    # Look to lower left.
-                    cell_x = x-1
-                    if cell_x >=0:
-                        adj.append(cell_y*xlim + cell_x)
-                    # Look below.
-                    cell_x = x
-                    adj.append(cell_y*xlim + cell_x)
-                    # Look to lower rigth.
-                    cell_x = x+1
-                    if cell_x < xlim:
-                        adj.append(cell_y*xlim + cell_x)
+        adj_list = [[]] * (ylim * xlim)
+        for i in range(ylim * xlim):
+            # Current cell index = y * xlim + x
+            adj = BoggleSolver._calc_adjacency(xlim, ylim, i)
+            adj_list[i] = adj
 
         return adj_list
 
+    @staticmethod
+    def _calc_adjacency(xlim, ylim, sq):
+        adj = []
+        y = int(sq / xlim)
+        x = sq - (y * xlim)
+
+        # Look at row above current cell.
+        if y-1 >= 0:
+            above = sq - xlim
+            # Look to upper left.
+            if x-1 >= 0:
+                adj.append(above - 1)
+            # Look above.
+            adj.append(above)
+            # Look upper right.
+            if x+1 < xlim:
+                adj.append(above + 1)
+
+        # Look at same row that current cell is on.
+        # Look to left of current cell.
+        if x-1 >= 0:
+            adj.append(sq - 1)
+        # Look to right of current cell.
+        if x+1 < xlim:
+            adj.append(sq + 1)
+
+        # Look at row below current cell.
+        if y+1 < ylim:
+            below = sq + xlim
+            # Look to lower left.
+            if x-1 >= 0:
+                adj.append(below - 1)
+            # Look below.
+            adj.append(below)
+            # Look to lower rigth.
+            if x+1 < xlim:
+                adj.append(below + 1)
+
+        return adj

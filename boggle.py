@@ -23,26 +23,32 @@
 #
 # Display help to see usage infomation: python boggle.py -h
 #
-
-__author__ = "Andrew Gillis"
-__copyright__ = "Copyright 2009, Andrew Gillis"
+from __future__ import print_function
 
 import bogglesolver
 import time
 import sys
 import os
 
-ALPHA=0
-LONGEST=1
-SHORTEST=2
-DEFAULT_DICT='boggle_dict.txt.gz'
+__author__ = "Andrew Gillis"
+__copyright__ = "Copyright 2009, Andrew Gillis"
+
+if sys.version < '3':
+    input = raw_input
+    range = xrange
+
+ALPHA = 0
+LONGEST = 1
+SHORTEST = 2
+DEFAULT_DICT = 'boggle_dict.txt.gz'
 
 
-def run_board(dict_file, xlen, ylen, sort_type, quiet_level, benchmark):
+def run_board(dict_file, xlen, ylen, sort_type, quiet_level, benchmark,
+              pre_compute_adj):
     if dict_file is None:
         dict_file = DEFAULT_DICT
 
-    solver = bogglesolver.BoggleSolver(xlen, ylen)
+    solver = bogglesolver.BoggleSolver(xlen, ylen, pre_compute_adj)
     if not solver.load_dictionary(dict_file):
         return 1
 
@@ -60,10 +66,10 @@ def run_board(dict_file, xlen, ylen, sort_type, quiet_level, benchmark):
             grid = ''.join(grid)
         else:
             try:
-                grid = raw_input('\nEnter %d letters from boggle grid: '
-                                 % board_size)
+                grid = input('\nEnter %d letters from boggle grid: '
+                             % board_size)
             except KeyboardInterrupt:
-                print
+                print()
                 break
 
         if not grid:
@@ -77,8 +83,8 @@ def run_board(dict_file, xlen, ylen, sort_type, quiet_level, benchmark):
         if words is None:
             continue
 
-        print '\nFound %d solutions for %dx%d grid in %0.2f msec:'\
-              % (len(words), xlen, ylen, elapsed * 1000)
+        print('\nFound %d solutions for %dx%d grid in %0.2f msec:'
+              % (len(words), xlen, ylen, elapsed * 1000))
 
         if quiet_level < 2:
             if quiet_level < 1:
@@ -101,10 +107,16 @@ def show_words(words, sort_type):
         words.reverse()
     elif sort_type == LONGEST:
         # Sort by word length, longest to shortest.
-        words.sort(cmp=lambda i,j: cmp(len(j), len(i)))
+        if sys.version < '3':
+            words.sort(cmp=lambda i, j: cmp(len(j), len(i)))
+        else:
+            words.sort(key=len)
     elif sort_type == SHORTEST:
         # Sort by word length, shortest to longest,
-        words.sort(cmp=lambda i,j: cmp(len(i), len(j)))
+        if sys.version < '3':
+            words.sort(cmp=lambda i, j: cmp(len(i), len(j)))
+        else:
+            words.sort(key=len, reverse=True)
 
     # Display words in 4 columns (assumes 80-char wide display).
     while(words):
@@ -116,85 +128,50 @@ def show_words(words, sort_type):
             w3 = words.pop().ljust(18)
         if words:
             w4 = words.pop().ljust(18)
-        print w1, w2, w3, w4
+        print(w1, w2, w3, w4)
+
+
+def main():
+    import argparse
+    ap = argparse.ArgumentParser(
+        description='Find words in X by Y boggle grids',
+        epilog='home page: https://github.com/gammazero/pybogglesolver')
+
+    ap.set_defaults(quiet_level=0)
+
+    ap.add_argument('-x', type=int, dest='xlen', default=4,
+                    help='Width (X-length) of board.')
+    ap.add_argument('-y', type=int, dest='ylen', default=4,
+                    help='Height (Y-length) of board.')
+    ap.add_argument('-b', action='store_true', dest='benchmark',
+                    help='Run benchmark test.')
+    ap.add_argument('-p', action='store_true', dest='pre_compute_adj',
+                    help='Pre-compute adjacency matrix.')
+    ap.add_argument('--longest', '-l', action='store_const', const=LONGEST,
+                    dest='sort_type', help='Sort words longest-first.')
+    ap.add_argument('--shortest', '-s', action='store_const', const=SHORTEST,
+                    dest='sort_type', help='Sort words shortest-first.')
+    ap.add_argument('-q', action='store_const', const=1,
+                    dest='quiet_level',  help='Do not display grid.')
+    ap.add_argument('-qq', action='store_const', const=2, dest='quiet_level',
+                    help='Do not display grid or solutions.')
+    ap.add_argument('words_file', nargs='?', default=DEFAULT_DICT,
+                    help='File containing valid words, separated by newline.')
+    args = ap.parse_args()
+
+    if not os.path.isfile(args.words_file):
+        print('Invalid words file: ', args.words_file, file=sys.stderr)
+        return 1
+
+    try:
+        rc = run_board(args.words_file, args.xlen, args.ylen, args.sort_type,
+                       args.quiet_level, args.benchmark, args.pre_compute_adj)
+    except RuntimeError as e:
+        print(e, file=sys.stderr)
+        return 1
+
+    return rc
 
 
 if __name__ == '__main__':
-    dict_file = None
-    xlen = 4
-    ylen = 4
-    sort_type = ALPHA
-    quiet_level = 0
-    benchmark = False
-
-    argv = list(sys.argv)
-    prg = argv.pop(0)
-    argc = len(argv)
-    usage_msg = 'usage: python '+prg+ \
-                ' [option].. [-x width] [-y height] [dictionary_file]'
-
-    help_opt = False
-    err_msg = None
-
-    while argv:
-        arg = argv.pop(0)
-        argc -= 1
-        if arg.startswith('-'):
-            if arg == '-h' or arg == '--help':
-                help_opt = True
-            elif arg == '-l' or arg == '--longest':
-                sort_type = LONGEST
-            elif arg == '-s' or arg == '--shortest':
-                sort_type = SHORTEST
-            elif arg == '-x':
-                if not argc:
-                    err_msg = 'Missing X length (width) of board'
-                    break
-                xlen = int(argv.pop(0))
-                argc -= 1
-            elif arg == '-y':
-                if not argc:
-                    err_msg = 'Missing Y length (height) of board'
-                    break
-                ylen = int(argv.pop(0))
-                argc -= 1
-            elif arg == '-qq':
-                quiet_level = 2
-            elif arg == '-q':
-                quiet_level = 1
-            elif arg == '-b':
-                benchmark = True
-            else:
-                err_msg = 'Unknown option: '+arg
-                break
-        else:
-            if not os.path.isfile(arg):
-                err_msg = 'Invalid dictionary file: '+arg
-                break
-            dict_file = arg
-
-    if err_msg:
-        print err_msg
-        print usage_msg
-        print 'Try '+prg+' -h for more information.'
-        sys.exit(1)
-
-    if help_opt:
-        print usage_msg
-        print '-b     : run benchmark test'
-        print '-h     : print this help message and exit (also --help)'
-        print '-l     : sort words longest-first'
-        print '-q     : do not display grid'
-        print '-qq    : do not display grid or solutions'
-        print '-s     : sort words shortest-first'
-        print '-x len : Width (X-length) of board.'
-        print '-y len : Height (Y-length) of board.'
-        print '\nDefault values:'
-        print 'If -l or -s not specified, then words are sorted alphabetically.'
-        print 'If -x is not specified, then x-length is set to 4.'
-        print 'If -y is not specified, then y-length is set to 4.'
-        print 'If no dictionary file is given, then use', DEFAULT_DICT
-        sys.exit(0)
-
-    rc = run_board(dict_file, xlen, ylen, sort_type, quiet_level, benchmark)
-    sys.exit(rc)
+    sys.exit(main())
