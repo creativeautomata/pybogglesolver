@@ -5,6 +5,7 @@ Andrew Gillis 22 Dec. 2009
 
 """
 from __future__ import print_function
+import os
 import sys
 import collections
 
@@ -22,7 +23,7 @@ class BoggleSolver(object):
 
     """
 
-    def __init__(self, xlen=None, ylen=None, pre_compute_adj=False):
+    def __init__(self, words_file, xlen=4, ylen=4, pre_compute_adj=False):
         """Create and initialize BoggleSolver instance.
 
         This creates the internal trie for fast word lookup letter-by-letter.
@@ -35,40 +36,17 @@ class BoggleSolver(object):
         pre_compute_adj -- Pre-compute adjacency matrix.
 
         """
-        if xlen is None:
-            xlen = 4
-        if ylen is None:
-            ylen = 4
         assert(xlen > 1)
         assert(ylen > 1)
-        board_size = xlen * ylen
         self.xlen = xlen
         self.ylen = ylen
-        self.board_size = board_size
+        self.board_size = xlen * ylen
         if pre_compute_adj:
             self.adjacency = BoggleSolver._create_adjacency_matrix(xlen, ylen)
         else:
             self.adjacency = None
-        self.trie = None
-
-    def load_dictionary(self, words_file):
-        """Load the file containing the reference words.
-
-        Arguments:
-        word_file   -- File containing valid words.  Each word must be on a
-                       separate line in this file.
-
-        Return:
-        True if success, False if error.
-
-        """
-        try:
-            word_count = self._create_dict_trie(words_file)
-        except IOError:
-            raise RuntimeError('unable to open words file: ' + words_file)
-
-        print('loaded', word_count, 'words from words file')
-        return True
+        self.trie = BoggleSolver._load_dictionary(
+            words_file, self.board_size, 3)
 
     def solve(self, grid):
         """Generate all solutions for the given boggle grid.
@@ -83,7 +61,7 @@ class BoggleSolver(object):
 
         """
         if self.trie is None:
-            raise RuntimeError('dictionary file not loaded')
+            raise RuntimeError('words file not loaded')
 
         if len(grid) != self.board_size:
             raise RuntimeError('invalid board')
@@ -177,7 +155,8 @@ class BoggleSolver(object):
 
         return found
 
-    def _create_dict_trie(self, words_file):
+    @staticmethod
+    def _load_dictionary(words_file, max_len, min_len):
         """Private method to create the trie for finding words.
 
         Arguments:
@@ -187,6 +166,9 @@ class BoggleSolver(object):
         Count of words inserted into trie.
 
         """
+        if not os.path.isfile(words_file):
+            raise RuntimeError('words file not found: ' + words_file)
+
         print('creating dictionary...')
         root = trie.Trie()
         word_count = 0
@@ -206,7 +188,7 @@ class BoggleSolver(object):
                     word = word.strip().decode("utf-8")
                 # Skip words that are too long or too short.
                 word_len = len(word)
-                if word_len > self.board_size or word_len < 3:
+                if word_len > max_len or word_len < min_len:
                     continue
                 # Skip words that start with capital letter.
                 if word[0].isupper():
@@ -224,9 +206,8 @@ class BoggleSolver(object):
         finally:
             f.close()
 
-        print('finished creating dictionary')
-        self.trie = root
-        return word_count
+        print('Loaded', word_count, 'words from file.')
+        return root
 
     @staticmethod
     def _create_adjacency_matrix(xlim, ylim):

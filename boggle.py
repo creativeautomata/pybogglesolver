@@ -24,11 +24,11 @@
 # Display help to see usage infomation: python boggle.py -h
 #
 from __future__ import print_function
-
-import bogglesolver
 import time
 import sys
 import os
+
+import bogglesolver
 
 __author__ = "Andrew Gillis"
 __copyright__ = "Copyright 2009, Andrew Gillis"
@@ -40,19 +40,17 @@ if sys.version < '3':
 ALPHA = 0
 LONGEST = 1
 SHORTEST = 2
-DEFAULT_DICT = 'boggle_dict.txt.gz'
+DEFAULT_WORDS = 'boggle_dict.txt.gz'
 
 
-def run_board(dict_file, xlen, ylen, sort_type, quiet_level, benchmark,
+def run_board(words_file, xlen, ylen, sort_type, quiet_level, benchmark,
               pre_compute_adj):
-    if dict_file is None:
-        dict_file = DEFAULT_DICT
+    if words_file is None:
+        words_file = DEFAULT_WORDS
 
-    solver = bogglesolver.BoggleSolver(xlen, ylen, pre_compute_adj)
-    if not solver.load_dictionary(dict_file):
-        return 1
+    solver = bogglesolver.BoggleSolver(words_file, xlen, ylen, pre_compute_adj)
+    board_size = solver.board_size
 
-    board_size = int(xlen * ylen)
     while(True):
         if benchmark:
             grid = []
@@ -155,7 +153,7 @@ def main():
                     dest='quiet_level',  help='Do not display grid.')
     ap.add_argument('-qq', action='store_const', const=2, dest='quiet_level',
                     help='Do not display grid or solutions.')
-    ap.add_argument('words_file', nargs='?', default=DEFAULT_DICT,
+    ap.add_argument('words_file', nargs='?', default=DEFAULT_WORDS,
                     help='File containing valid words, separated by newline.')
     args = ap.parse_args()
 
